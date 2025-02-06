@@ -1,0 +1,8 @@
+identifier_name:
+    min_length: 1
+
+cyclomatic_complexity:
+    ignores_case_statements: true
+
+disabled_rules:
+   - trailing_whitespace

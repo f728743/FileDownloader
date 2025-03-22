@@ -8,17 +8,28 @@ import Foundation
 
 @MainActor
 class ViewModel: ObservableObject {
-    @Published var files: [DownloadInfo] = Config.files.map { DownloadInfo(url: $0, status: .queued) }
+    @Published var files: [DownloadInfo] = Config.files.map { DownloadInfo(url: $0, state: .pending) }
     static let list = Const.largeFiles
     private var downloader = DownloadQueue(maxConcurrentDownloads: 2)
 
-    func downloadAll() {
-        downloader.startDownloads(urls: Config.files)
+    init() {
         Task {
             for await event in downloader.events {
                 process(event)
             }
         }
+    }
+
+    func toggleDownload(url: URL) {
+        if let file = files.first(where: { $0.url == url }), file.state == .downloading {
+            downloader.cancelDownload(url: url)
+        } else {
+            downloader.downloadFile(from: url)
+        }
+    }
+
+    func downloadAll() {
+        downloader.downloadFiles(from: Config.files)
     }
 
     enum Config {
@@ -29,15 +40,31 @@ class ViewModel: ObservableObject {
 private extension ViewModel {
     func process(_ event: DownloadQueue.Event) {
         guard let index = files.firstIndex(where: { $0.url == event.url }) else { return }
-        switch event.event {
-        case .canceled:
-            files[index].update(status: .queued)
+        files[index].update(state: event.state.downloadInfoState)
+
+        switch event.state {
+        case .queued:
+            files[index].update(currentBytes: 0)
         case let .completed(lacalURL):
-            files[index].update(status: .completed)
-            print(lacalURL.path)
+            print("Downloaded", lacalURL.path)
         case let .progress(currentBytes, totalBytes):
-            files[index].update(status: .downloading)
             files[index].update(currentBytes: currentBytes, totalBytes: totalBytes)
+        case let .failed(error):
+            print("Error", error.localizedDescription)
+        default: break
+        }
+    }
+}
+
+extension DownloadQueue.DownloadState {
+    var downloadInfoState: DownloadInfo.State {
+        switch self {
+        case .queued: .queued
+        case .progress: .downloading
+        case .completed: .completed
+        case .canceled: .pending
+        case .paused: .paused
+        case .failed: .failed
         }
     }
 }

@@ -15,6 +15,7 @@ final class FileDownload: NSObject {
         case progress(currentBytes: Int64, totalBytes: Int64)
         case completed(url: URL)
         case canceled(data: Data?)
+        case failed(error: Error)
     }
 
     convenience init(url: URL) {

@@ -25,6 +25,9 @@ private extension ContentView {
         List {
             ForEach(viewModel.files) { file in
                 DownloadableFileRowView(file: file)
+                    .onTapGesture {
+                        viewModel.toggleDownload(url: file.url)
+                    }
             }
         }
         .listStyle(.plain)

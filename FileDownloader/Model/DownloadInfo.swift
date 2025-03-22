@@ -8,13 +8,14 @@ import Foundation
 
 struct DownloadInfo {
     let url: URL
-    private(set) var status: Status
+    private(set) var state: State
     private(set) var currentBytes: Int64 = 0
     private(set) var totalBytes: Int64 = 0
 }
 
 extension DownloadInfo {
-    enum Status {
+    enum State {
+        case pending
         case queued
         case downloading
         case completed
@@ -30,30 +31,23 @@ extension DownloadInfo {
     var fileURL: URL {
         URL.documentsDirectory
             .appending(path: "\(id.nonCryptoHash)")
-            .appendingPathExtension("mp3")
+            .appendingPathExtension("m4a")
     }
 
-    mutating func update(status: Status) {
-        self.status = status
+    mutating func update(state: State) {
+        self.state = state
     }
 
-    mutating func update(currentBytes: Int64, totalBytes: Int64) {
-        self.currentBytes = currentBytes
-        self.totalBytes = totalBytes
+    mutating func update(currentBytes: Int64? = nil, totalBytes: Int64? = nil) {
+        if let currentBytes {
+            self.currentBytes = currentBytes
+        }
+        if let totalBytes {
+            self.totalBytes = totalBytes
+        }        
     }
 }
 
 extension DownloadInfo: Identifiable {
     var id: String { url.absoluteString }
-}
-
-extension String {
-    var nonCryptoHash: UInt64 {
-        var result = UInt64(5381)
-        let buf = [UInt8](utf8)
-        for byte in buf {
-            result = 127 * (result & 0x00FF_FFFF_FFFF_FFFF) + UInt64(byte)
-        }
-        return result
-    }
 }

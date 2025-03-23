@@ -66,19 +66,11 @@ extension FileDownload: URLSessionDownloadDelegate {
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        let response = (downloadTask.response as? HTTPURLResponse)
-        let statusCode = response?.statusCode ?? 200
-        guard (200 ... 399).contains(where: { $0 == statusCode }) else {
-            let error: NetworkError = .httpError(
-                statusCode: statusCode,
-                description: response?.description
-            )
-            continuation.yield(.failed(error: error))
-            continuation.finish()
-            return
+        if let networkError = downloadTask.response?.networkError {
+            continuation.yield(.failed(error: networkError))
+        } else {
+            continuation.yield(.completed(url: location))
         }
-
-        continuation.yield(.completed(url: location))
         continuation.finish()
     }
 

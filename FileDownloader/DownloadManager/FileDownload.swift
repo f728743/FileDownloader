@@ -13,7 +13,7 @@ final class FileDownload: NSObject {
     private let urlSessionTask: URLSessionDownloadTask
 
     enum Event {
-        case progress(currentBytes: Int64, totalBytes: Int64)
+        case progress(bytesDownloaded: Int64, totalBytes: Int64)
         case completed(url: URL)
         case canceled(data: Data?, pausing: Bool)
         case failed(error: Error)
@@ -83,7 +83,7 @@ extension FileDownload: URLSessionDownloadDelegate {
     ) {
         continuation.yield(
             .progress(
-                currentBytes: totalBytesWritten,
+                bytesDownloaded: totalBytesWritten,
                 totalBytes: totalBytesExpectedToWrite
             )
         )

@@ -27,6 +27,7 @@ struct DownloadableFileRowView: View {
                 Text(file.details)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if file.inProgress {
                     ProgressView(value: file.progress)
                 }

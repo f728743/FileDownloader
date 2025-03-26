@@ -12,6 +12,7 @@ class ViewModel: ObservableObject {
     @Published var files: [DownloadInfo] = Config.files.map { DownloadInfo(url: $0, state: .pending) }
     static let list = Const.largeFiles
     private var downloader = DownloadQueue(maxConcurrentDownloads: 2)
+    @Published var mediaList: MediaList = .empty
 
     init() {
         Task {
@@ -19,6 +20,21 @@ class ViewModel: ObservableObject {
                 process(event)
             }
         }
+    }
+
+    func viewTask() async {
+        let baseUrlStr = "https://raw.githubusercontent.com/tmp-acc/GTA-V-Radio-Stations/master"
+        let urlStr = "\(baseUrlStr)/sim_radio_stations.json"
+        guard let url = URL(string: urlStr) else { return }
+        if let radio = try? await loadSimRadioSeries(url: url) {
+            mediaList = .init(from: radio, baseUrl: baseUrlStr)
+        }
+    }
+
+    func loadSimRadioSeries(url: URL) async throws -> SimRadio.Series {
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let series = try JSONDecoder().decode(SimRadio.Series.self, from: data)
+        return series
     }
 
     func toggleDownload(url: URL) {

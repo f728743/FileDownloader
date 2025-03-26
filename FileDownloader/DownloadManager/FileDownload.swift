@@ -11,24 +11,32 @@ final class FileDownload: NSObject {
     let events: AsyncStream<Event>
     private let continuation: AsyncStream<Event>.Continuation
     private let urlSessionTask: URLSessionDownloadTask
+    private let destinationFolder: URL
 
     enum Event {
-        case progress(currentBytes: Int64, totalBytes: Int64)
-        case completed(url: URL)
+        case progress(bytesDownloaded: Int64, totalBytes: Int64)
+        case completed
         case canceled(data: Data?, pausing: Bool)
         case failed(error: Error)
     }
 
-    convenience init(url: URL, urlSession: URLSession) {
-        self.init(urlSessionTask: urlSession.downloadTask(with: url))
+    convenience init(url: URL, destinationFolder: URL, urlSession: URLSession) {
+        self.init(
+            destinationFolder: destinationFolder,
+            urlSessionTask: urlSession.downloadTask(with: url)
+        )
     }
 
-    convenience init(resumeData data: Data, urlSession: URLSession) {
-        self.init(urlSessionTask: urlSession.downloadTask(withResumeData: data))
+    convenience init(resumeData data: Data, destinationFolder: URL, urlSession: URLSession) {
+        self.init(
+            destinationFolder: destinationFolder,
+            urlSessionTask: urlSession.downloadTask(withResumeData: data)
+        )
     }
 
-    private init(urlSessionTask: URLSessionDownloadTask) {
+    private init(destinationFolder: URL, urlSessionTask: URLSessionDownloadTask) {
         self.urlSessionTask = urlSessionTask
+        self.destinationFolder = destinationFolder
         (events, continuation) = AsyncStream.makeStream(of: Event.self)
         super.init()
         continuation.onTermination = { @Sendable [weak self] _ in
@@ -69,7 +77,26 @@ extension FileDownload: URLSessionDownloadDelegate {
         if let networkError = downloadTask.response?.networkError {
             continuation.yield(.failed(error: networkError))
         } else {
-            continuation.yield(.completed(url: location))
+            do {
+                guard let fileName = downloadTask.originalRequest?.url?.lastPathComponent else {
+                    throw (URLError(.badURL))
+                }
+                if !FileManager.default.fileExists(atPath: destinationFolder.path) {
+                    try FileManager.default.createDirectory(
+                        at: destinationFolder,
+                        withIntermediateDirectories: true,
+                        attributes: nil
+                    )
+                }
+                let destinationURL = destinationFolder.appending(path: fileName, directoryHint: .notDirectory)
+                if FileManager.default.fileExists(atPath: destinationURL.path) {
+                    try FileManager.default.removeItem(at: destinationURL)
+                }
+                try FileManager.default.moveItem(at: location, to: destinationURL)
+                continuation.yield(.completed)
+            } catch {
+                continuation.yield(.failed(error: error))
+            }
         }
         continuation.finish()
     }
@@ -83,7 +110,7 @@ extension FileDownload: URLSessionDownloadDelegate {
     ) {
         continuation.yield(
             .progress(
-                currentBytes: totalBytesWritten,
+                bytesDownloaded: totalBytesWritten,
                 totalBytes: totalBytesExpectedToWrite
             )
         )

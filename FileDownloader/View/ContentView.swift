@@ -7,38 +7,34 @@
 
 import SwiftUI
 
-struct ContentView: View {
-    @StateObject private var viewModel = ViewModel()
+@MainActor
+struct AppDependencies {
+    let mediaState: MediaState
+    let simRadioDownloader: SimRadioDownload
 
-    var body: some View {
-        Button(
-            action: { viewModel.downloadAll() },
-            label: { Text("Download All") }
-        )
-        VStack {
-            fileList
-        }
+    init() {
+        mediaState = MediaState()
+        simRadioDownloader = SimRadioDownload(mediaState: mediaState)
     }
 }
 
-private extension ContentView {
-    var fileList: some View {
-        List {
-            ForEach(viewModel.files) { file in
-                DownloadableFileRowView(
-                    file: file,
-                    onDownloadToggle: { [weak viewModel] in
-                        viewModel?.toggleDownload(url: file.url)
-                    },
-                    onCancelTapped: { [weak viewModel] in
-                        viewModel?.cancelDownload(url: file.url)
-                    }
-                )
-                .listRowInsets(.init(top: 0, leading: 16, bottom: 0, trailing: 8))
-                .buttonStyle(PlainButtonStyle())
-            }
+struct ContentView: View {
+    @State var dependencies: AppDependencies
+
+    init() {
+        _dependencies = State(wrappedValue: AppDependencies())
+    }
+
+    var body: some View {
+        MediaView(
+            dependencies: .init(
+                mediaState: dependencies.mediaState,
+                downloader: dependencies.simRadioDownloader
+            )
+        )
+        .task {
+            await dependencies.mediaState.load()
         }
-        .listStyle(.plain)
     }
 }
 

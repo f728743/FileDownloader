@@ -7,10 +7,10 @@
 
 import Foundation
 
-struct DownloadInfo {
+struct DownloadInfo: Equatable {
     let url: URL
-    private(set) var state: State
-    private(set) var currentBytes: Int64 = 0
+    private(set) var state: DownloadInfo.State = .pending
+    private(set) var bytesDownloaded: Int64 = 0
     private(set) var totalBytes: Int64 = 0
 }
 
@@ -24,9 +24,14 @@ extension DownloadInfo {
         case paused
     }
 
+    init(url: URL, state: DownloadInfo.State) {
+        self.url = url
+        self.state = state
+    }
+
     var progress: Double {
         guard totalBytes > 0 else { return 0 }
-        return Double(currentBytes) / Double(totalBytes)
+        return Double(bytesDownloaded) / Double(totalBytes)
     }
 
     var fileURL: URL {
@@ -35,13 +40,13 @@ extension DownloadInfo {
             .appendingPathExtension("m4a")
     }
 
-    mutating func update(state: State) {
+    mutating func update(state: DownloadInfo.State) {
         self.state = state
     }
 
-    mutating func update(currentBytes: Int64? = nil, totalBytes: Int64? = nil) {
-        if let currentBytes {
-            self.currentBytes = currentBytes
+    mutating func update(bytesDownloaded: Int64? = nil, totalBytes: Int64? = nil) {
+        if let bytesDownloaded {
+            self.bytesDownloaded = bytesDownloaded
         }
         if let totalBytes {
             self.totalBytes = totalBytes

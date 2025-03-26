@@ -7,12 +7,16 @@
 
 import Foundation
 
-@MainActor
-class DownloadQueue {
+actor DownloadQueue {
+    struct DownloadRequest: Equatable, Hashable {
+        let sourceURL: URL
+        let destinationDirectoryPath: String
+    }
+
     enum DownloadState {
         case queued
-        case progress(currentBytes: Int64, totalBytes: Int64)
-        case completed(url: URL)
+        case progress(bytesDownloaded: Int64, totalBytes: Int64)
+        case completed
         case canceled
         case paused
         case failed(error: Error)
@@ -20,79 +24,87 @@ class DownloadQueue {
 
     struct Event {
         let state: DownloadState
-        let url: URL
+        let downloadRequest: DownloadRequest
     }
 
     let events: AsyncStream<Event>
-
+    private let continuation: AsyncStream<Event>.Continuation
+    private let destinationDirectory: URL
     private let urlSession: URLSession
     private let maxConcurrentDownloads: Int
-    private let continuation: AsyncStream<Event>.Continuation
     private var downloadQueue: [QueueElement] = []
-    private var downloads: [URL: FileDownload] = [:]
+    private var activeDownloads: [DownloadRequest: FileDownload] = [:]
 
-    init(maxConcurrentDownloads: Int = 6) {
+    init(destinationDirectory: URL, maxConcurrentDownloads: Int = 6) {
         let config = URLSessionConfiguration.default
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.urlCache = nil
         urlSession = URLSession(configuration: config)
-
+        self.destinationDirectory = destinationDirectory
         self.maxConcurrentDownloads = maxConcurrentDownloads
         (events, continuation) = AsyncStream.makeStream(of: Event.self)
-        continuation.onTermination = { @Sendable [weak self] _ in
-            Task { @MainActor in
-                self?.cancelAllDownloads()
+
+        continuation.onTermination = { [weak self] _ in
+            Task { [weak self] in
+                await self?.cancelAllDownloads(pausing: false)
             }
         }
     }
 
-    func downloadFiles(from urls: [URL]) {
-        Task {
-            await withTaskGroup(of: Void.self) { group in
-                for url in urls {
-                    group.addTask {
-                        await self.downloadFile(from: url)
-                    }
-                }
+    func append(_ downloadRequests: [DownloadRequest]) async {
+        await withTaskGroup(of: Void.self) { group in
+            for downloadRequest in downloadRequests {
+                group.addTask { await self.append(downloadRequest) }
             }
         }
     }
 
-    func downloadFile(from url: URL) {
-        if let index = downloadQueue.firstIndex(where: { $0.url == url }) {
+    func append(_ downloadRequest: DownloadRequest) async {
+        if let index = downloadQueue.firstIndex(where: { $0.downloadRequest == downloadRequest }) {
             if case let .paused(data) = downloadQueue[index].state {
                 downloadQueue[index].state = .queued(resumeData: data)
             } else {
                 return
             }
         } else {
-            downloadQueue.append(QueueElement(url: url, state: .queued(resumeData: nil)))
+            downloadQueue.append(
+                QueueElement(
+                    downloadRequest: downloadRequest,
+                    state: .queued(resumeData: nil)
+                )
+            )
         }
-        continuation.yield(.init(state: .queued, url: url))
-        if activeDownloadsCount < maxConcurrentDownloads {
-            startDownload(from: url)
+
+        continuation.yield(Event(state: .queued, downloadRequest: downloadRequest))
+
+        if activeDownloads.count < maxConcurrentDownloads {
+            await start(downloadRequest)
         }
     }
 
-    func cancelDownload(url: URL, pausing: Bool = true) {
-        if let download = downloads[url] {
+    func cancel(_ downloadRequest: DownloadRequest, pausing: Bool = true) async {
+        if let download = activeDownloads[downloadRequest] {
             download.cancel(pausing: pausing)
-        } else if !pausing, let index = downloadQueue.firstIndex(where: { $0.url == url }) {
+        } else if !pausing, let index = downloadQueue.firstIndex(where: { $0.downloadRequest == downloadRequest }) {
             switch downloadQueue[index].state {
             case let .queued(data):
-                deleteQueuedDownload(index: index, url: url, resumeData: data)
+                await deleteQueuedDownload(index: index, resumeData: data)
             case let .paused(data):
-                deleteQueuedDownload(index: index, url: url, resumeData: data)
+                await deleteQueuedDownload(index: index, resumeData: data)
             default:
                 break
             }
         }
     }
 
-    func cancelAllDownloads(pausing: Bool = true) {
-        downloads.forEach { cancelDownload(url: $0.key, pausing: pausing) }
+    func cancelAllDownloads(pausing: Bool = true) async {
+        for downloadRequest in activeDownloads.keys {
+            await cancel(downloadRequest, pausing: pausing)
+        }
     }
 }
+
+// MARK: - Private Helpers
 
 private extension DownloadQueue {
     enum ElementState {
@@ -102,7 +114,7 @@ private extension DownloadQueue {
     }
 
     struct QueueElement {
-        let url: URL
+        let downloadRequest: DownloadRequest
         var state: ElementState
     }
 
@@ -110,80 +122,105 @@ private extension DownloadQueue {
         downloadQueue.count { $0.isDownloading }
     }
 
-    func deleteQueuedDownload(index: Int, url: URL, resumeData: Data?) {
+    func deleteQueuedDownload(index: Int, resumeData: Data?) async {
+        let element = downloadQueue[index]
         downloadQueue.remove(at: index)
-        continuation.yield(.init(state: .canceled, url: url))
+        continuation.yield(Event(state: .canceled, downloadRequest: element.downloadRequest))
+
         if let resumeData = resumeData {
-            deleteDownloadTmpFile(resumeData: resumeData)
+            await deleteDownloadTmpFile(
+                resumeData: resumeData,
+                destinationPath: element.downloadRequest.destinationDirectoryPath
+            )
         }
     }
 
-    func deleteDownloadTmpFile(resumeData: Data) {
-        Task {
-            let download = FileDownload(resumeData: resumeData, urlSession: urlSession)
-            download.start()
-            download.cancel(pausing: false)
-        }
+    func destinationFolder(destinationPath: String) -> URL {
+        destinationDirectory
+            .appending(path: destinationPath, directoryHint: .notDirectory)
     }
 
-    func processDownloadQueue() {
-        while activeDownloadsCount < maxConcurrentDownloads {
+    func deleteDownloadTmpFile(resumeData: Data, destinationPath: String) async {
+        let download = FileDownload(
+            resumeData: resumeData,
+            destinationFolder: destinationFolder(destinationPath: destinationPath),
+            urlSession: urlSession
+        )
+        download.start()
+        download.cancel(pausing: false)
+    }
+
+    func processDownloadQueue() async {
+        while activeDownloads.count < maxConcurrentDownloads {
             if let element = downloadQueue.first(where: { $0.isQueued }) {
-                startDownload(from: element.url)
+                await start(element.downloadRequest)
             } else {
                 break
             }
         }
     }
 
-    func startDownload(from url: URL) {
-        guard let index = downloadQueue.firstIndex(where: { $0.url == url }) else { return }
+    func start(_ downloadRequest: DownloadRequest) async {
+        guard let index = downloadQueue.firstIndex(where: { $0.downloadRequest == downloadRequest }) else { return }
         let oldElement = downloadQueue[index]
         downloadQueue[index].state = .downloading
 
-        Task {
-            let download = oldElement.resumeData.map {
-                FileDownload(resumeData: $0, urlSession: urlSession)
-            } ?? FileDownload(url: url, urlSession: urlSession)
-            downloads[url] = download
-            download.start()
+        let download = oldElement.resumeData.map {
+            FileDownload(
+                resumeData: $0,
+                destinationFolder: destinationFolder(destinationPath: downloadRequest.destinationDirectoryPath),
+                urlSession: urlSession
+            )
+        } ?? FileDownload(
+            url: downloadRequest.sourceURL,
+            destinationFolder: destinationFolder(destinationPath: downloadRequest.destinationDirectoryPath),
+            urlSession: urlSession
+        )
 
+        activeDownloads[downloadRequest] = download
+        download.start()
+
+        continuation.yield(
+            Event(
+                state: .progress(bytesDownloaded: 0, totalBytes: 0),
+                downloadRequest: downloadRequest
+            )
+        )
+        Task {
             for await event in download.events {
-                process(event, for: url)
+                await process(event, for: downloadRequest)
             }
-            await MainActor.run {
-                processDownloadQueue()
-            }
+            await processDownloadQueue()
         }
     }
 
-    func process(_ event: FileDownload.Event, for url: URL) {
+    func process(_ event: FileDownload.Event, for downloadRequest: DownloadRequest) async {
         switch event {
         case .completed, .failed:
-            downloadQueue.removeAll { $0.url == url }
-            downloads.removeValue(forKey: url)
+            downloadQueue.removeAll { $0.downloadRequest == downloadRequest }
+            activeDownloads.removeValue(forKey: downloadRequest)
         case let .canceled(data, pausing):
-            if let index = downloadQueue.firstIndex(where: { $0.url == url }) {
+            if let index = downloadQueue.firstIndex(where: { $0.downloadRequest == downloadRequest }) {
                 if pausing {
                     downloadQueue[index].state = .paused(resumeData: data)
                 } else {
                     downloadQueue.remove(at: index)
                 }
             }
-            downloads.removeValue(forKey: url)
+            activeDownloads.removeValue(forKey: downloadRequest)
         default: break
         }
-        continuation.yield(.init(state: event.downloadState, url: url))
+        continuation.yield(Event(state: event.downloadState, downloadRequest: downloadRequest))
     }
 }
 
 extension FileDownload.Event {
     var downloadState: DownloadQueue.DownloadState {
         switch self {
-        case let .progress(currentBytes, totalBytes):
-            .progress(currentBytes: currentBytes, totalBytes: totalBytes)
-        case let .completed(url):
-            .completed(url: url)
+        case let .progress(bytesDownloaded, totalBytes):
+            .progress(bytesDownloaded: bytesDownloaded, totalBytes: totalBytes)
+        case .completed:
+            .completed
         case let .failed(error):
             .failed(error: error)
         case let .canceled(_, pausing):

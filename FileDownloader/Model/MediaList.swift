@@ -7,46 +7,80 @@
 
 import Foundation
 
-struct MediaList: Identifiable, Equatable, Hashable {
-    let id = UUID()
+struct MediaListInfo: Equatable, Hashable {
     let artwork: URL?
     let title: String
     let subtitle: String?
+}
+
+struct MediaList: Identifiable, Equatable, Hashable {
+    let id: MediaListID
+    let info: MediaListInfo
     let items: [Media]
 }
 
-struct Media: Identifiable, Equatable, Hashable {
-    let id = UUID()
+struct MediaInfo: Equatable, Hashable {
     let artwork: URL?
     let title: String
-    let subtitle: String?
+    let listSubtitle: String?
+    let detailsSubtitle: String?
     let online: Bool
+}
+
+struct Media: Identifiable, Equatable, Hashable {
+    let id: MediaID
+    let info: MediaInfo
+}
+
+enum MediaListID: Hashable {
+    case emptyMediaListID
+    case simRadioSeries(SimSeries.ID)
+}
+
+enum MediaID: Hashable {
+    case simRadio(SimStation.ID)
+}
+
+struct MediaState {
+    let simRadio: SimRadioMedia
+}
+
+extension MediaState {
+    var mediaList: [MediaList] {
+        simRadio.series.values.map { series in
+            .init(
+                id: .simRadioSeries(series.id),
+                info: series.info,
+                items: series.stations.compactMap {
+                    guard let station = simRadio.stations[$0] else { return nil }
+                    return Media(
+                        id: .simRadio(station.id),
+                        info: station.info
+                    )
+                }
+            )
+        }
+    }
+}
+
+extension MediaState {
+    static let empty: MediaState = .init(
+        simRadio: .init(
+            series: [:],
+            fileGroups: [:],
+            stations: [:]
+        )
+    )
 }
 
 extension MediaList {
     static let empty: MediaList = .init(
-        artwork: nil,
-        title: "",
-        subtitle: nil,
+        id: .emptyMediaListID,
+        info: .init(
+            artwork: nil,
+            title: "",
+            subtitle: nil
+        ),
         items: []
     )
-
-    init(from series: SimRadio.Series, baseUrl: String) {
-        self.init(
-            artwork: URL(string: "\(baseUrl)/\(series.info.logo)"),
-            title: series.info.title,
-            subtitle: nil,
-            items: series.stations.map { .init(from: $0, baseUrl: baseUrl) }
-        )
-    }
-}
-
-extension Media {
-    init(from station: SimRadio.Station, baseUrl: String) {
-        title = station.info.title
-        subtitle = station.info.genre
-        let artwork = "\(baseUrl)/\(station.tag)/\(station.info.logo)"
-        self.artwork = URL(string: artwork)
-        online = false
-    }
 }

@@ -27,9 +27,9 @@ private extension ContentView {
         ForEach(Array(viewModel.mediaList.items.enumerated()), id: \.offset) { offset, item in
             let isLastItem = offset == viewModel.mediaList.items.count - 1
             MediaItemView(
-                artwork: item.artwork,
-                title: item.title,
-                subtitle: item.subtitle
+                artwork: item.info.artwork,
+                title: item.info.title,
+                subtitle: item.info.listSubtitle
             )
             .contentShape(.rect)
             .listRowInsets(.screenInsets)
@@ -37,7 +37,9 @@ private extension ContentView {
                 isLastItem ? $0[.leading] : $0[.leading] + 60
             }
             .swipeActions(edge: .trailing) {
-                Button {} label: {
+                Button {
+                    viewModel.downloadMedia(withID: item.id)
+                } label: {
                     Label("Download", systemImage: "arrow.down")
                 }
                 .tint(.init(.systemBlue))

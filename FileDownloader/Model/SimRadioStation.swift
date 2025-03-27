@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum SimRadio {
+enum SimRadioDTO {
     struct Series: Codable, Sendable {
         let info: SeriesInfo
         let common: SeriesCommon
@@ -124,25 +124,4 @@ enum SimRadio {
         case groupOr
         case timeInterval
     }
-}
-
-extension SimRadio.SeriesInfo {
-    static let empty: SimRadio.SeriesInfo = .init(
-        title: "",
-        logo: ""
-    )
-}
-
-extension SimRadio.SeriesCommon {
-    static let empty: SimRadio.SeriesCommon = .init(
-        fileGroups: []
-    )
-}
-
-extension SimRadio.Series {
-    static let empty: SimRadio.Series = .init(
-        info: .empty,
-        common: .empty,
-        stations: []
-    )
 }

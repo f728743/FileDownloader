@@ -94,9 +94,9 @@ private extension DownloadInfo {
 }
 
 #Preview {
-    @Previewable @State var file0 = DownloadInfo(url: URL(filePath: "storage/movie01.mp4")!, state: .downloading)
-    @Previewable @State var file1 = DownloadInfo(url: URL(filePath: "storage/movie02.mp4")!, state: .paused)
-    @Previewable @State var file2 = DownloadInfo(url: URL(filePath: "storage/movie03.mp4")!, state: .failed)
+    @Previewable @State var file0 = DownloadInfo(url: URL(filePath: "storage/movie01.mp4")!)
+    @Previewable @State var file1 = DownloadInfo(url: URL(filePath: "storage/movie02.mp4")!)
+    @Previewable @State var file2 = DownloadInfo(url: URL(filePath: "storage/movie03.mp4")!)
     List {
         DownloadableFileRowView(file: file0)
         DownloadableFileRowView(file: file1)

@@ -9,7 +9,7 @@ import Foundation
 
 struct DownloadInfo {
     let url: URL
-    private(set) var state: State
+    private(set) var state: DownloadInfo.State = .pending
     private(set) var currentBytes: Int64 = 0
     private(set) var totalBytes: Int64 = 0
 }
@@ -35,7 +35,7 @@ extension DownloadInfo {
             .appendingPathExtension("m4a")
     }
 
-    mutating func update(state: State) {
+    mutating func update(state: DownloadInfo.State) {
         self.state = state
     }
 

@@ -7,13 +7,13 @@
 
 import Foundation
 
-struct MediaListInfo: Equatable, Hashable {
+struct MediaListInfo {
     let artwork: URL?
     let title: String
     let subtitle: String?
 }
 
-struct MediaList: Identifiable, Equatable, Hashable {
+struct MediaList: Identifiable {
     let id: MediaListID
     let info: MediaListInfo
     let items: [Media]
@@ -27,7 +27,7 @@ struct MediaInfo: Equatable, Hashable {
     let online: Bool
 }
 
-struct Media: Identifiable, Equatable, Hashable {
+struct Media: Identifiable {
     let id: MediaID
     let info: MediaInfo
 }

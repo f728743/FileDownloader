@@ -22,19 +22,25 @@ class ViewModel: ObservableObject {
     }
 
     func toggleDownload(url: URL) {
-        if let file = files.first(where: { $0.url == url }), file.state == .downloading {
-            downloader.cancelDownload(url: url, pausing: true)
-        } else {
-            downloader.downloadFile(from: url)
+        Task {
+            if let file = files.first(where: { $0.url == url }), file.state == .downloading {
+                await downloader.cancelDownload(url: url, pausing: true)
+            } else {
+                await downloader.downloadFile(from: url)
+            }
         }
     }
 
     func cancelDownload(url: URL) {
-        downloader.cancelDownload(url: url, pausing: false)
+        Task {
+            await downloader.cancelDownload(url: url, pausing: false)
+        }
     }
 
     func downloadAll() {
-        downloader.downloadFiles(from: Config.files)
+        Task {
+            await downloader.downloadFiles(from: Config.files)
+        }
     }
 
     enum Config {

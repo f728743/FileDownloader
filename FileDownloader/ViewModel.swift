@@ -11,14 +11,14 @@ import Observation
 @Observable @MainActor
 class ViewModel {
     var mediaState: MediaState?
-    var simRadioDownloader: SimRadioDownloadService?
+    var downloader: SimRadioDownload?
 
     init(
         mediaState: MediaState,
-        simRadioDownloader: SimRadioDownloadService
+        downloader: SimRadioDownload
     ) {
         self.mediaState = mediaState
-        self.simRadioDownloader = simRadioDownloader
+        self.downloader = downloader
     }
 
     var mediaItems: [MediaView.MediaItem] {
@@ -37,6 +37,6 @@ class ViewModel {
     }
 
     func downloadMedia(withID id: MediaID) {
-        simRadioDownloader?.downloadMedia(withID: id)
+        downloader?.downloadMedia(withID: id)
     }
 }

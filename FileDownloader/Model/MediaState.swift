@@ -30,7 +30,8 @@ class MediaState {
 
     func load() async {
         let simRadioURLs = [
-            "https://raw.githubusercontent.com/tmp-acc/GTA-V-Radio-Stations/master/sim_radio_stations.json"
+            "https://raw.githubusercontent.com/tmp-acc/GTA-V-Radio-Stations-TestDownload/master/sim_radio_stations.json"
+//            "https://raw.githubusercontent.com/tmp-acc/GTA-V-Radio-Stations/master/sim_radio_stations.json"
         ].compactMap { URL(string: $0) }
 
         await loadSimRadio(urls: simRadioURLs)

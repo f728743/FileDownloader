@@ -10,11 +10,11 @@ import SwiftUI
 @MainActor
 struct AppDependencies {
     let mediaState: MediaState
-    let simRadioDownloader: SimRadioDownloadService
+    let simRadioDownloader: SimRadioDownload
 
     init() {
         mediaState = MediaState()
-        simRadioDownloader = SimRadioDownloadService(mediaState: mediaState)
+        simRadioDownloader = SimRadioDownload(mediaState: mediaState)
     }
 }
 
@@ -29,7 +29,7 @@ struct ContentView: View {
         MediaView(
             dependencies: .init(
                 mediaState: dependencies.mediaState,
-                simRadioDownloader: dependencies.simRadioDownloader
+                downloader: dependencies.simRadioDownloader
             )
         )
         .task {

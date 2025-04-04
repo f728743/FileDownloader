@@ -24,6 +24,11 @@ extension DownloadInfo {
         case paused
     }
 
+    init(url: URL, state: DownloadInfo.State) {
+        self.url = url
+        self.state = state
+    }
+
     var progress: Double {
         guard totalBytes > 0 else { return 0 }
         return Double(bytesDownloaded) / Double(totalBytes)

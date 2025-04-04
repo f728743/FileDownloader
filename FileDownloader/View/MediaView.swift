@@ -14,7 +14,7 @@ struct MediaView: View {
         _viewModel = State(
             wrappedValue: ViewModel(
                 mediaState: dependencies.mediaState,
-                simRadioDownloader: dependencies.simRadioDownloader
+                downloader: dependencies.downloader
             )
         )
     }
@@ -28,7 +28,7 @@ struct MediaView: View {
 
     struct Dependencies {
         let mediaState: MediaState
-        let simRadioDownloader: SimRadioDownloadService
+        let downloader: SimRadioDownload
     }
 
     struct MediaItem {

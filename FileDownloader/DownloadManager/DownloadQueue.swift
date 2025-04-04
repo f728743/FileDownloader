@@ -149,6 +149,7 @@ private extension DownloadQueue {
         activeDownloads[url] = download
         download.start()
 
+        continuation.yield(Event(state: .progress(bytesDownloaded: 0, totalBytes: 0), url: url))
         Task {
             for await event in download.events {
                 await process(event, for: url)

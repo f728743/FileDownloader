@@ -1,3 +1,10 @@
+//
+//  SimRadioDownload.swift
+//
+//
+//  Created by Alexey Vorobyov on 26.03.2025.
+//
+
 import Foundation
 
 private enum DownloadLog {
@@ -26,7 +33,7 @@ actor SimRadioDownload {
     struct DownloadStatus {
         let state: DownloadState
         let totalBytes: Int64
-        let bytesDownloaded: Int64
+        let downloadedBytes: Int64
     }
 
     enum DownloadState {
@@ -61,7 +68,7 @@ actor SimRadioDownload {
             guard let self else { return }
             let stream = self.downloadQueue.events
             for await event in stream {
-                await self.processDownloaderEvent(event)
+                await self.handleDownloaderEvent(event)
             }
             await self.finishEventStream()
         }
@@ -106,7 +113,7 @@ private extension SimRadioDownload {
 
     func download(station: SimStation) async {
         stationDownloads[station.id] = DownloadableStation(
-            status: .init(state: .queued, totalBytes: 0, bytesDownloaded: 0),
+            status: .init(state: .queued, totalBytes: 0, downloadedBytes: 0),
             fileGroupIDs: station.fileGroups
         )
 
@@ -162,7 +169,7 @@ private extension SimRadioDownload {
         .init(value: downloadRequest.destinationDirectoryPath)
     }
 
-    func processDownloaderEvent(_ event: DownloadQueue.Event) async {
+    func handleDownloaderEvent(_ event: DownloadQueue.Event) async {
         guard let groupID = groupID(of: event.downloadRequest),
               let fileIndex = groupDownloads[groupID]?
               .files
@@ -223,7 +230,7 @@ private extension SimRadioDownload {
         guard let stationDownloadInfo = stationDownloads[stationID] else {
             // Should not happen if called correctly
             log(error: "Station \(stationID) not found during status calculation.")
-            return DownloadStatus(state: .queued, totalBytes: 0, bytesDownloaded: 0)
+            return DownloadStatus(state: .queued, totalBytes: 0, downloadedBytes: 0)
         }
         return stationDownloadInfo
             .fileGroupIDs.map { groupState($0) }
@@ -236,7 +243,7 @@ private extension SimRadioDownload {
             return DownloadStatus(
                 state: .queued,
                 totalBytes: 0,
-                bytesDownloaded: 0,
+                downloadedBytes: 0,
             )
         }
         return files.overallStatus
@@ -329,7 +336,7 @@ extension DownloadInfo {
         // Update file state based on the event
         let previousState = state
         switch queueState {
-        case let .progress(bytesDownloaded, totalBytes):
+        case let .progress(downloadedBytes, totalBytes):
             if state != .downloading { // Only set downloading on first progress?
                 // fileInfo.state = .downloading // Let group state calc handle this?
                 // stateChanged = previousState != fileInfo.state
@@ -340,13 +347,13 @@ extension DownloadInfo {
                 result.update(state: .downloading)
                 stateChanged = true
             }
-            result.update(bytesDownloaded: bytesDownloaded, totalBytes: totalBytes)
+            result.update(downloadedBytes: downloadedBytes, totalBytes: totalBytes)
 
         case .completed:
             result.update(state: .completed)
             // Ensure progress is 100% if totalBytes is known
             if totalBytes > 0 {
-                result.update(bytesDownloaded: totalBytes)
+                result.update(downloadedBytes: totalBytes)
             } else {
                 // If total size wasn't fetched, maybe try again or log warning?
                 log(warning: "File \(url.lastPathComponent) completed with unknown total size.")
@@ -378,7 +385,7 @@ extension DownloadInfo {
             // Reverting to queued might be simplest for now.
             if state != .queued {
                 result.update(state: .queued)
-                result.update(bytesDownloaded: 0) // Reset progress on cancel
+                result.update(downloadedBytes: 0) // Reset progress on cancel
                 stateChanged = true
             }
         }
@@ -408,18 +415,18 @@ extension Int64 {
 
 protocol DownloadProgressProtocol {
     var totalBytes: Int64 { get }
-    var bytesDownloaded: Int64 { get }
+    var downloadedBytes: Int64 { get }
 }
 
 extension DownloadProgressProtocol {
     var progress: Double {
         guard totalBytes != 0 else { return 0.0 }
-        return (Double(bytesDownloaded) / Double(totalBytes)).clamped(to: 0.0 ... 1.0)
+        return (Double(downloadedBytes) / Double(totalBytes)).clamped(to: 0.0 ... 1.0)
     }
 
     var percent: Double { progress * 100 }
     var percentString: String { String(format: "%.1f%%", percent) }
-    var progressString: String { "\(percentString) (\(bytesDownloaded.bytesToMB) / \(totalBytes.bytesToMB))" }
+    var progressString: String { "\(percentString) (\(downloadedBytes.bytesToMB) / \(totalBytes.bytesToMB))" }
 }
 
 // Internal enum to simplify state aggregation
@@ -443,7 +450,7 @@ private protocol DownloadStatusInternalProtocol:
 
 extension Array: DownloadProgressProtocol where Element: DownloadProgressProtocol {
     var totalBytes: Int64 { reduce(0) { $0 + $1.totalBytes } }
-    var bytesDownloaded: Int64 { reduce(0) { $0 + $1.bytesDownloaded } }
+    var downloadedBytes: Int64 { reduce(0) { $0 + $1.downloadedBytes } }
 }
 
 // Aggregation logic for collections
@@ -473,7 +480,7 @@ extension Array where Element: DownloadStatusInternalProtocol {
         .init(
             state: overallState,
             totalBytes: totalBytes,
-            bytesDownloaded: bytesDownloaded,
+            downloadedBytes: downloadedBytes,
         )
     }
 }
@@ -508,7 +515,7 @@ extension SimRadioDownload.DownloadableStation: DownloadStatusInternalProtocol {
     fileprivate var failedURLs: [URL] { status.failedURLs }
     fileprivate var internalState: SimDownloadStateInternal { status.state.internalState }
     var totalBytes: Int64 { status.totalBytes }
-    var bytesDownloaded: Int64 { status.bytesDownloaded }
+    var downloadedBytes: Int64 { status.downloadedBytes }
 }
 
 private extension SimRadioDownload.DownloadState {

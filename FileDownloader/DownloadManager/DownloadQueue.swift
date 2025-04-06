@@ -15,7 +15,7 @@ actor DownloadQueue {
 
     enum DownloadState {
         case queued
-        case progress(bytesDownloaded: Int64, totalBytes: Int64)
+        case progress(downloadedBytes: Int64, totalBytes: Int64)
         case completed
         case canceled
         case paused
@@ -46,7 +46,7 @@ actor DownloadQueue {
 
         continuation.onTermination = { [weak self] _ in
             Task { [weak self] in
-                await self?.cancelAllDownloads(pausing: false)
+                await self?.cancelAllDownload(pausing: false)
             }
         }
     }
@@ -97,7 +97,7 @@ actor DownloadQueue {
         }
     }
 
-    func cancelAllDownloads(pausing: Bool = true) async {
+    func cancelAllDownload(pausing: Bool = true) async {
         for downloadRequest in activeDownloads.keys {
             await cancel(downloadRequest, pausing: pausing)
         }
@@ -182,7 +182,7 @@ private extension DownloadQueue {
 
         continuation.yield(
             Event(
-                state: .progress(bytesDownloaded: 0, totalBytes: 0),
+                state: .progress(downloadedBytes: 0, totalBytes: 0),
                 downloadRequest: downloadRequest
             )
         )
@@ -217,8 +217,8 @@ private extension DownloadQueue {
 extension FileDownload.Event {
     var downloadState: DownloadQueue.DownloadState {
         switch self {
-        case let .progress(bytesDownloaded, totalBytes):
-            .progress(bytesDownloaded: bytesDownloaded, totalBytes: totalBytes)
+        case let .progress(downloadedBytes, totalBytes):
+            .progress(downloadedBytes: downloadedBytes, totalBytes: totalBytes)
         case .completed:
             .completed
         case let .failed(error):

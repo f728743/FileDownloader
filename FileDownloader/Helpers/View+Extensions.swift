@@ -1,6 +1,6 @@
 //
 //  View+Extensions.swift
-//  FileDownloader
+//
 //
 //  Created by Alexey Vorobyov on 29.03.2025.
 //

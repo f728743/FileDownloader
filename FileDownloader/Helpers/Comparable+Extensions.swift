@@ -1,6 +1,6 @@
 //
 //  Comparable+Extensions.swift
-//  FileDownloader
+//  
 //
 //  Created by Alexey Vorobyov on 03.04.2025.
 //
